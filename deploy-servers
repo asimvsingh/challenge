@@ -1,0 +1,48 @@
+#!/bin/bash
+
+#routine to start goapps
+function deploy_goapp {
+  for i in `cat hosts`
+   do
+     ssh -i ~/.ssh/avsingh_sl_rsa avsingh@$i "~/challenge/goap_starter.sh $i" 
+   done
+}
+
+
+#routine to start python-app
+function deploy_python_app {
+  for i in `cat hosts`
+  do
+    ssh -i ~/.ssh/avsingh_sl_rsa avsingh@$i "~/challenge/python_app_starter.sh $i"                
+  done
+}
+
+function cleanup {
+for i in `cat hosts`
+  do
+    ssh -i ~/.ssh/avsingh_sl_rsa avsingh@$i "~/challenge/cleanup.sh"
+  done
+}
+   
+
+REPLY="y"
+while [[ $REPLY =~ ^[Yy]$ ]]
+do
+echo "Choose Action?"
+select status in "Rollout goapp" "Rollout python App" "Rollout lua app" "cleanup" ; do
+     case $status in
+         "Rollout goapp" ) deploy_goapp
+            break;;
+         "Rollout python App" ) deploy_python_app 
+            break;;
+         "Rollout lua app" )   echo "Not imlemented yet" 
+            break;;
+         "cleanup" ) cleanup 
+            break;;
+         * ) echo "Enter a valid action"
+           break;;
+    esac
+done
+read -p "Do you want to perform another Action (y/n) " -n 1
+echo
+done
