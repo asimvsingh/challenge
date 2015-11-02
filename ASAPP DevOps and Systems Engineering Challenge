@@ -1,0 +1,125 @@
+ASAPP DevOps and Systems Engineering Challenge
+==============================================
+
+v0.1
+
+Welcome to your challenge project!
+
+You have two timeline options. If you live outside of NY and would have to fly in for your onsite, we strongly prefer that you take option 1. If coming in to the office is easy for you, then whichever you prefer is great.
+
+Option 1: Code at home, half-day at ASAPP
+    - Finish your implementation and write up answers to the follow-up questions at home on your own time.
+    - Send us your results within 5 days. If you need more time, please let us know.
+    - We estimate that the challenge should take somewhere between 1.5 and 10 hours depending on your experience and speed.
+
+Option 2: Answer questions at home, full-day at ASAPP
+    - Think through the challenge at home, make a rough plan of your approach, and write up answers to all the follow-up questions.
+    - Send us your results within 3 days. If you need more time, please let us know.
+    - We estimate this should take somewhere between 0.5 and 3 hours depending on your experience and speed.
+
+Please bring your laptop if you come visit the ASAPP office - working in a familiar dev environment is always more efficient!
+
+Motivation
+----------
+
+ASAPP's server infrastructure must deliver realtime communication to companies with hundreds of millions of customers while maintaining virtually 0 downtime. We persist chat logs more or less forever, frequently deploy new code multiple times per day, and must meet multiple industry compliance standards in the coming year (HIPAA, PCI, etc). In order to tackle these challenges and many more, we rely on our team members' ability to reason about and design such systems, both conceptually and concretely, from a bird's eye perspective as well as in great detail.
+
+Your challenge is to design and implement 0-downtime deployment for three simple HTTP servers (Go, Python & Lua), and then discuss a few questions around systems engineering, InnoDB schemas, downtime monitoring, and logging.
+
+If we mutually agree to proceed then your work will form the basis for continued discussions and interviews.
+
+
+Misc thoughts and recommendations before we go into details
+-----------------------------------------------------------
+
+- Use the tools and languages that you're most familiar with.
+- We really value legible code and well organized file directories.
+- Opt for using open source libraries rather than reinventing any wheels.
+- It's a plus if your results come with a version control commit history.
+- Have fun! If you don't think this project sounds like fun, then working at ASAPP may not be your cup of tea :)
+
+
+Challenge equirements
+---------------------
+
+1. Put together three basic HTTP servers - one in Go, one in Python and one in Lua.
+
+    - Keep them as simple as possible, e.g responding "Hi!" to every request is sufficient.
+    - Use any HTTP libraries you want, e.g http/net for Go, werkzeug for Python and xavante for Lua.
+    - To simulate long-lived connections, you may want to put a random `sleep` in there.
+    - This is basically just the setup for the challenge - write as little code as possible :)
+
+2. Write deployment script(s) for the servers.
+
+    - It should be invoked something like `./deploy-servers go-server lua-server python-server`
+    - It should be able to deploy one or multiple servers
+    - It should be able to deploy the servers to multiple machines
+    - You can assume that there is a script that lists machine hostnames for a given server name, e.g `./get-hostnames go-server`
+    - You can also assume that all required server dependencies are installed on the target machines
+    - When deploying a new server version, open connections to the old server version must not be interrupted
+    - There must always be an unchanging way to reach the most recent version of any given server.
+        (e.g have :8000 always go to the newest go-server version, :8001 to lua-server, and :8002 to python-server)
+
+
+Follow-up questions
+-------------------
+
+Please take the time to write answers to these questions. Think through them deeply, but keep answers short and comprehensive when possible.
+
+Our goal is to get a sense how deep and broad your understand of systems like ours is, and how effectively you can communicate about them. Don't worry if you don't have all the answers off the top of your head: we're also very much looking for your ability to reason about these sorts of problems, and design/evaluate possible answers.
+
+1. A realtime communication server tends to have lots of connections that can remain open for hours or even days. At some point after deploying a new server version, the old version has to terminate. How would you do this? Write up short descriptions of two or three methods, and indicate which you prefer and why.
+
+Ans)The way I have implemented my solution, I cant find out the last port my most recent server version is running. I can find either keep or track of it in some persistent locaion( file) or I can dump the iptables port redirecting rule. Basically look at the port to which port 8080 redirected(forwarded) to, thats the port of my most recent version of the applicatoin.
+sudo iptables -t nat -L PREROUTING -n --line-numbers
+Now I know which app i dont have to touch. Next I want to find out connections to other apps are doing. I can use netstat with various options and filter to zero into ports,state, processes to see working,idle, or no established connections.
+netstat -ant | grep "applications_process" | awk -F" " '{print $6}' | sort | uniq -c
+
+This will ge us over all how many connections in which state.
+We can also get an idea for how many connections are established,waiting or doing something per instance per running aplications.
+netstat -ant | grep "application/processname"| awk -F" " '{print $4}' | sort | uniq -c
+
+This will give us how many connections to the local address with host:port. We can decide which apps to terminate and which ones should remain open cause they are doing some work.
+
+In a highly available and realtime system I will run these checks on a periodic basis and only kill an app when that app has not been doing anything for sometime. I would like to error on caustious side.
+
+
+2. InnoDB clusters data in its primary key B+Tree. As a result, "natural primary key" tables and "auto-increment primary key" tables have different characteristics. In a few words, how would you describe the differences? Also, give at least one examples of when you would use natural keys over auto-incrementing ones.
+
+Ans) B+tree is a version of BTree where the data pointers are only on the leaf node, this can make sequential retrieval easy where we can make a links list of leaf node. This kind of tree is good for disk ( block ) storage. 
+Now for natural and auto-increment key, natural key can end up any where in the B+Tree where it can either fit or cause a split, splits are costly operation in B+Tree where split can one node can cause split in other nodes and so on. People think that keeping auto-increment( sorted ) keys can keep the tree balance and cause less splitting, they are wrong. Having sorted values inserted can also result in splitting, but the advantage here is that we know where the key is going to end , its going to be in the righ most side of the tree.So (1) RDBMS software can optimize based on this behaviour (2) there is always some space left in the right most node where the next value is going to go, so the chances of splitting is less.
+
+Natural keys are meaning columns which can be used where as auto-imcrement key is just one way of uniquely identifying a tuple/row. If we are in a primary key/ foeign key situation where primary key of one table is foreign key of another , if we have meaning ful natural key then we can avoid a join to get the meaning ful answer. For example if I want to find out a color of my car and i have foreign key for color if this key is color name then i can just make do with simple predicate in where clause, otherwise I would have to do a join with a mapping table to find out the colorname.
+
+
+3. We strive for virtually 0 downtime, but shit does happen. If/when disaster strikes we have to respond immidately. Please take the time to describe how you would structure downtime alerts and human response protocols at a company like ASAPP in order to sleep soundly at night.
+
+Ans)Being on 24/7 deployment and maintenance plus support , one thing that I have learned is that we first and foremost we need to weed out false alarms. More than 90 percent of severe pages In my opinion are either false alarms or things that can wait. First and foremost we need to have a good way to categorize the alerts and based on that structure the notification and to whom it should go, should it only be an email , or a page or a blazing call to disrupt somebody's thanksgiving.
+
+When we get an alert , just a red signal that something happened is not good, it should have information about the problem, and very importantly quick steps to try fix the problem for the time being or completely. One thing that I have being around traditional on premis world and cloud , is that being on maintaining a cloud app is a different mind set you have think first how quickly i can unnblock the user and not if I can get to the root cause of the problem in 5 hours. So if you can fix something quickly fix, or at least get the system back online. Alert notification should have such info if possible to quickly failover or restart the node to get the business going.
+
+Rest is obvious when shit does hit the fan, everybody is running around so thats business as usual.
+
+
+4. Logs can be fantastic, and logs can be a headache. We have servers written in multiple languages, with multiple versions of each running in parallel on multiple machines that can be torn down and spun up at any time. In addition, PCI compliance requires long-lived access logs of all production services. How would you structure logging for this whole system?
+Ans) First logs should have identfication to which version of the app they belong to. So that if you know a particular user complained you can qucikly find out the relevant log files to start looking for the problem. 
+
+Logging should be done in a manner that it is easy to identify user transactions and tie them to user request if we have to trace through a request.Session id, userid if any, etc...
+One should be able to take a user session and trace through when it started to when it end, and how gracefully or otherwise.
+
+Now to maintain manageable size of the logs plus history, we can use circular logging plus archiving, also keep log files of certain size so that when some process goes amuck its not filling up your whole disk. Ther are various ways to limit the log file size, ulimit if you know all the other programs wont use a file bigger than a log file size. Third party tool, and loggers (logrotate). Either your app can keep track of the log file or you can run an external script routinely to check for the log file size. And have scheme something like this.
+app >> log_file 
+if log file almost 110 mb
+mv log_file log_file1
+---log_file 2
+
+    log_file4
+when you reach log_fil10, add the 1st file to the log archive.
+ tar --append --file=collection.tar log_file1
+
+
+
+
+
+5. How do you feel about being point person and in-house expert on compliance? (PCI, HIPPA, etc.)
+why not ?
