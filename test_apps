@@ -1,0 +1,4 @@
+#!/bin/bash
+
+curl -H "Keep-Alive: 200" -H "Connection: keep-alive" http://10.84.209.50:8081
+curl -H "Keep-Alive: 200" -H "Connection: keep-alive" http://10.84.209.50:8080
